@@ -1,5 +1,6 @@
 # Blocky Road
 
+n**Play it:** https://themarktba.github.io/blocky-road/ (rebuilt and published automatically on every push to `main`).
 Low-poly 3D driving game: build a car from parts in the garage, drive as far as you can,
 collect fuel, dodge obstacles and enemies, earn coins, spend them on better parts.
 Vite + TypeScript + Three.js + Rapier (ray-cast vehicle controller).
