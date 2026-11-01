@@ -1,0 +1,262 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2b36; overscroll-behavior: none; }
+body {
+  font-family: 'Trebuchet MS', system-ui, sans-serif; color: #fff;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#app { position: fixed; inset: 0; }
+/* The canvas handles its own touches (orbit, taps); stop the browser scrolling/zooming the page. */
+canvas { display: block; touch-action: none; }
+button { touch-action: manipulation; }
+svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Keep things clear of phone notches and home bars. */
+:root {
+  --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+.hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+.hud-panel {
+  position: absolute; top: 16px; padding: 10px 14px;
+  background: rgba(20, 30, 40, 0.65); border: 3px solid #0d1b24; border-radius: 6px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+.hud-fuel { left: 16px; width: min(280px, calc(100vw - 32px)); }
+.hud-stats { right: 16px; text-align: right; line-height: 1.6; }
+.hud-label { font-size: 12px; letter-spacing: 2px; color: #b8c4cc; font-weight: bold; }
+.hud-value { font-size: 22px; font-weight: bold; display: inline-block; min-width: 150px; }
+.fuel-bar { margin-top: 6px; height: 18px; background: #0d1b24; border-radius: 3px; overflow: hidden; }
+.fuel-fill { height: 100%; width: 100%; background: linear-gradient(#ffd166, #f4a261); transition: width 0.1s linear; }
+.fuel-fill.low { background: linear-gradient(#ff6b6b, #c0392b); animation: blink 0.6s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.5; } }
+
+.hud-help {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; color: #fff; background: rgba(20, 30, 40, 0.5);
+  padding: 6px 12px; border-radius: 4px; white-space: nowrap;
+}
+.hud-toast {
+  position: absolute; top: 28%; left: 50%; transform: translate(-50%, 10px);
+  font-size: 32px; font-weight: bold; color: #ffd166; text-shadow: 0 3px 0 #000;
+  opacity: 0; transition: opacity 0.2s, transform 0.2s;
+}
+.hud-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.run-over {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 15, 20, 0.55); pointer-events: auto;
+}
+.run-over.hidden { display: none; }
+.run-over-card {
+  background: #22313f; border: 4px solid #0d1b24; border-radius: 8px; padding: 24px 32px;
+  text-align: center; min-width: 280px; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+  max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow-y: auto;
+}
+.run-over-card h1 { margin: 0 0 4px; font-size: 40px; color: #ffd166; }
+.run-over-card p { margin: 0 0 16px; color: #b8c4cc; }
+.run-over-stats div { display: flex; justify-content: space-between; gap: 24px; padding: 4px 0; font-size: 18px; }
+.run-over-stats span { color: #b8c4cc; }
+.run-over-hint { margin-top: 10px; font-size: 12px; color: #7f8c97; }
+
+/* ---------- Shared ---------- */
+.hidden { display: none !important; }
+.btn-primary, .btn-secondary {
+  font: inherit; font-weight: bold; border: 3px solid #0d1b24; border-radius: 6px; cursor: pointer;
+  box-shadow: 0 4px 0 #0d1b24; padding: 10px 20px;
+}
+.btn-primary { color: #0d1b24; background: #ffd166; font-size: 20px; }
+.btn-secondary { color: #fff; background: #3d5a80; font-size: 15px; }
+.btn-primary:active, .btn-secondary:active { transform: translateY(3px); box-shadow: 0 1px 0 #0d1b24; }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: 0 4px 0 #0d1b24; }
+.coin, .coin-value { color: #ffd166; }
+
+/* ---------- HUD additions ---------- */
+.hud-hp-label { margin-top: 8px; }
+.hp-bar { height: 12px; }
+.hp-fill { height: 100%; width: 100%; background: linear-gradient(#80ed99, #38b000); transition: width 0.2s; }
+.hp-fill.low { background: linear-gradient(#ff6b6b, #c0392b); }
+.hud-alerts { position: absolute; left: 16px; top: 150px; display: flex; flex-direction: column; gap: 6px; }
+.hud-alert {
+  background: rgba(192, 57, 43, 0.85); border: 2px solid #0d1b24; border-radius: 4px;
+  padding: 4px 10px; font-weight: bold; font-size: 14px; transition: opacity 0.6s;
+}
+.hud-alert.fade { opacity: 0; }
+.hud-toast.bad { color: #ff6b6b; }
+.run-over-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 18px; }
+.run-over-card .run-over-buttons button { margin-top: 0; }
+.run-over-stats .coins-row b { color: #ffd166; }
+
+/* ---------- Garage ---------- */
+.garage { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+.garage > * { pointer-events: auto; }
+.garage-top {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 24px; background: rgba(13, 27, 36, 0.75);
+  border: 3px solid #0d1b24; border-radius: 6px; padding: 6px 18px;
+}
+.garage-top h1 { margin: 0; font-size: 22px; color: #ffd166; letter-spacing: 2px; text-transform: uppercase; }
+.garage-wallet { font-size: 16px; font-weight: bold; white-space: nowrap; }
+.garage-panel {
+  position: absolute; top: 70px; bottom: 50px; width: 230px; overflow-y: auto;
+  background: rgba(20, 30, 40, 0.85); border: 3px solid #0d1b24; border-radius: 6px; padding: 10px;
+}
+.garage-catalog { left: 12px; }
+.garage-stats { right: 12px; display: flex; flex-direction: column; gap: 8px; bottom: auto; }
+.garage-stats h2 { margin: 0 0 4px; font-size: 16px; color: #b8c4cc; letter-spacing: 2px; text-transform: uppercase; }
+.cat-title { font-size: 12px; letter-spacing: 2px; color: #b8c4cc; font-weight: bold; margin: 10px 0 4px; text-transform: uppercase; }
+.cat-title:first-child { margin-top: 0; }
+.part-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin-bottom: 4px;
+  font: inherit; color: #fff; background: #2a3b4b; border: 2px solid transparent; border-radius: 4px;
+  padding: 6px 8px; cursor: pointer;
+}
+.part-btn:hover { background: #33495d; }
+.part-btn.selected { border-color: #ffd166; background: #3a4f63; }
+.part-btn.pricey { opacity: 0.5; }
+.part-btn.pricey .part-cost { color: #ef476f; }
+.swatch { width: 18px; height: 18px; border: 2px solid #0d1b24; border-radius: 3px; flex: none; }
+.part-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.part-name { font-weight: bold; font-size: 14px; }
+.part-stats { font-size: 11px; color: #b8c4cc; }
+.part-cost { font-size: 12px; font-weight: bold; color: #ffd166; white-space: nowrap; }
+.stat { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 14px; }
+.stat span { color: #b8c4cc; }
+.stat .bar { grid-column: 1 / -1; height: 6px; background: #0d1b24; border-radius: 3px; overflow: hidden; }
+.stat .bar span { display: block; height: 100%; background: #ffd166; }
+.garage-errors { margin: 4px 0; padding-left: 18px; color: #ff8c8c; font-size: 13px; }
+.garage-errors:empty { display: none; }
+.garage-row { display: flex; gap: 8px; }
+.garage-row button { flex: 1; }
+.garage-help {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 13px;
+  background: rgba(13, 27, 36, 0.7); padding: 6px 12px; border-radius: 4px; white-space: nowrap;
+}
+.garage-toast {
+  position: absolute; top: 80px; left: 50%; transform: translateX(-50%); padding: 8px 16px;
+  background: #ffd166; color: #0d1b24; font-weight: bold; border: 3px solid #0d1b24; border-radius: 6px;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none;
+}
+.garage-toast.show { opacity: 1; }
+
+/* ---------- Garage toolbar & stats toggle ---------- */
+.garage-toolbar {
+  position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 6px; padding: 6px; background: rgba(13, 27, 36, 0.8);
+  border: 3px solid #0d1b24; border-radius: 10px;
+}
+.garage-toolbar button {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; padding: 6px 8px;
+  font: inherit; font-size: 11px; font-weight: bold; color: #dbe4ea; background: #2a3b4b;
+  border: 2px solid transparent; border-radius: 6px; cursor: pointer;
+}
+.garage-toolbar button svg { width: 22px; height: 22px; }
+.garage-toolbar button.on { border-color: #ffd166; color: #ffd166; background: #3a4f63; }
+.garage-toolbar button[data-mode="remove"].on { border-color: #ef476f; color: #ff8fa3; }
+.garage-toolbar button:disabled { opacity: 0.35; cursor: default; }
+.stats-toggle {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer;
+}
+.stats-caret { color: #b8c4cc; transition: transform 0.2s; }
+.garage-stats.collapsed [data-stats] { display: none; }
+.garage-stats.collapsed .stats-caret { transform: rotate(-90deg); }
+
+/* ---------- Touch driving controls ---------- */
+.touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+.touch-controls > * { pointer-events: auto; }
+.touch-controls button, .tc-steer {
+  -webkit-user-select: none; user-select: none; touch-action: none;
+  color: rgba(255, 255, 255, 0.92); background: rgba(13, 27, 36, 0.45);
+  border: 3px solid rgba(255, 255, 255, 0.35); border-radius: 22px;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.touch-controls .active { background: rgba(255, 209, 102, 0.55); border-color: #ffd166; color: #0d1b24; }
+.tc-steer {
+  position: absolute; left: calc(16px + var(--safe-l)); bottom: calc(18px + var(--safe-b));
+  width: min(196px, 41vw); height: 92px; display: flex; overflow: hidden; padding: 0;
+}
+.tc-steer-half { flex: 1; display: flex; align-items: center; justify-content: center; padding: 22px 14px; }
+.tc-steer-half + .tc-steer-half { border-left: 2px solid rgba(255, 255, 255, 0.25); }
+.tc-pedals {
+  position: absolute; right: calc(16px + var(--safe-r)); bottom: calc(18px + var(--safe-b));
+  display: grid; grid-template-columns: min(84px, 19vw) min(92px, 21vw); grid-template-rows: 76px 92px; gap: 12px;
+  grid-template-areas: "fire gas" "brake gas"; pointer-events: none;
+}
+.tc-pedals button { pointer-events: auto; padding: 18px; }
+.tc-gas { grid-area: gas; }
+.tc-brake { grid-area: brake; }
+.touch-controls .tc-fire { grid-area: fire; border-radius: 50%; border-color: rgba(255, 107, 107, 0.7); color: #ffb3b3; }
+.touch-controls .tc-fire.active { background: rgba(230, 57, 70, 0.75); color: #fff; }
+.tc-top { position: absolute; top: calc(12px + var(--safe-t)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.touch-controls .tc-small { width: 46px; height: 46px; padding: 10px; border-radius: 12px; }
+
+/* Touch devices: no keyboard help, bigger tap targets. */
+.touch .hud-help { display: none; }
+.touch .part-btn { padding: 9px 8px; }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 700px), (max-height: 500px) {
+  .hud-panel { top: calc(8px + var(--safe-t)); padding: 6px 10px; border-width: 2px; }
+  .hud-fuel { left: calc(8px + var(--safe-l)); width: 150px; }
+  .hud-stats { right: calc(8px + var(--safe-r)); line-height: 1.3; }
+  .hud-label { font-size: 9px; letter-spacing: 1px; }
+  .hud-value { font-size: 15px; min-width: 96px; }
+  .fuel-bar { height: 10px; margin-top: 3px; }
+  .hp-bar { height: 8px; }
+  .hud-hp-label { margin-top: 4px; }
+  .hud-alerts { top: calc(96px + var(--safe-t)); left: calc(8px + var(--safe-l)); }
+  .hud-alert { font-size: 12px; padding: 3px 8px; }
+  .hud-toast { font-size: 24px; top: 24%; }
+  .run-over-card { padding: 14px 18px; min-width: 0; width: 340px; }
+  .run-over-card h1 { font-size: 28px; }
+  .run-over-card p { margin-bottom: 8px; font-size: 14px; }
+  .run-over-stats div { font-size: 14px; padding: 2px 0; }
+  .run-over-hint { display: none; }
+  .tc-top { left: auto; right: calc(8px + var(--safe-r)); top: calc(118px + var(--safe-t)); transform: none; flex-direction: column; }
+  .garage-top { top: calc(6px + var(--safe-t)); padding: 4px 12px; gap: 12px; border-width: 2px; }
+  .garage-top h1 { font-size: 16px; }
+  .garage-wallet { font-size: 13px; }
+  .garage-help { display: none; }
+  .garage-toolbar { gap: 4px; padding: 4px; max-width: calc(100vw - 12px); overflow-x: auto; }
+  .garage-toolbar button { min-width: 40px; padding: 4px 3px; font-size: 9px; flex: none; }
+  .garage-toolbar button svg { width: 20px; height: 20px; }
+  .stat { font-size: 12px; }
+  .stat .bar { display: none; }
+  .btn-primary { font-size: 17px; padding: 8px 16px; }
+  .btn-secondary { font-size: 13px; padding: 7px 10px; }
+}
+
+/* Phone held upright: catalog becomes a swipeable strip along the bottom, stats sit at the top. */
+@media (max-width: 700px) and (min-height: 501px) {
+  .garage-catalog {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; height: calc(118px + var(--safe-b));
+    padding: 8px 8px calc(8px + var(--safe-b)); border-width: 3px 0 0; border-radius: 0;
+    display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
+  }
+  .garage-catalog .cat-title {
+    writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; flex: none; font-size: 10px; text-align: center;
+  }
+  .garage-catalog .part-btn {
+    flex: none; width: 128px; margin: 0; flex-direction: column; align-items: flex-start; gap: 4px; position: relative;
+  }
+  .garage-catalog .part-cost { position: absolute; top: 6px; right: 6px; font-size: 11px; }
+  .garage-stats {
+    top: calc(44px + var(--safe-t)); left: 8px; right: 8px; width: auto; padding: 8px; gap: 6px; max-height: 45vh;
+  }
+  .garage-stats [data-stats] { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+  .garage-toolbar { bottom: calc(128px + var(--safe-b)); }
+}
+
+/* Phone held sideways: narrow side columns so the car stays visible in the middle. */
+@media (max-height: 500px) {
+  .garage-panel { top: calc(40px + var(--safe-t)); bottom: 8px; width: 180px; padding: 6px; border-width: 2px; }
+  .garage-catalog { left: calc(6px + var(--safe-l)); }
+  .garage-stats { right: calc(6px + var(--safe-r)); bottom: auto; max-height: calc(100vh - 50px); }
+  .part-stats { display: none; }
+  .part-btn { padding: 6px; }
+  .garage-toolbar { bottom: calc(8px + var(--safe-b)); }
+  .tc-steer { width: 176px; height: 80px; }
+  .tc-top { top: calc(8px + var(--safe-t)); left: 50%; right: auto; transform: translateX(-50%); flex-direction: row; }
+  .tc-pedals { grid-template-columns: 72px 84px; grid-template-rows: 64px 80px; gap: 10px; }
+}
